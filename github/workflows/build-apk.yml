@@ -1,0 +1,67 @@
+
+name: Build TIJARATI APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "TRADEVERSE_TIJARATI_V24.zip"
+      - ".github/workflows/build-apk.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Extract project
+        run: |
+          mkdir source
+          unzip -q TRADEVERSE_TIJARATI_V24.zip -d source
+          PROJECT_DIR=$(find source -name package.json -not -path '*/node_modules/*' -print -quit | xargs dirname)
+          test -n "$PROJECT_DIR"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      - name: Install and test
+        run: |
+          cd "$PROJECT_DIR"
+          npm install --no-audit --no-fund
+          npm test
+          npm run build
+
+      - name: Prepare Android
+        run: |
+          cd "$PROJECT_DIR"
+          if [ ! -d android ]; then
+            npx cap add android
+          fi
+          npx cap sync android
+
+      - name: Build APK
+        run: |
+          cd "$PROJECT_DIR/android"
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: TIJARATI-APK
+          path: ${{ env.PROJECT_DIR }}/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
